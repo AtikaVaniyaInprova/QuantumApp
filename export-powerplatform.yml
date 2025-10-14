@@ -1,0 +1,120 @@
+name: Export Power Platform artifacts to Git
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  export_artifacts:
+    runs-on: windows-latest
+    env:
+      SOLUTION_NAME: ${{ secrets.SOLUTION_NAME }}
+      CANVAS_APP_IDS: ${{ secrets.CANVAS_APP_IDS }}
+      SRC_SOLUTIONS_DIR: src/solutions
+      SRC_CANVAS_DIR: src/canvas
+      DATA_DIR: data
+      EXPORT_BRANCH: ${{ secrets.EXPORT_BRANCH || 'exports' }}
+
+    steps:
+      - name: Checkout repository (persist credentials to push)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Install Power Platform Tools (pac CLI)
+        uses: microsoft/powerplatform-actions/actions-install@v1
+
+      # Authenticate (creates an auth profile for pac)
+      - name: Auth to Power Platform (service principal)
+        run: |
+          pac auth create --name ghauth --url "${{ secrets.SOURCE_ENVIRONMENT_URL }}" --client-id "${{ secrets.PP_CLIENT_ID }}" --tenant "${{ secrets.PP_TENANT_ID }}" --client-secret "${{ secrets.PP_CLIENT_SECRET }}"
+          pac auth select --name ghauth
+
+      # Export the named solution to a zip file
+      - name: Export solution (zip)
+        run: |
+          echo "Exporting solution ${SOLUTION_NAME} ..."
+          mkdir -p exported
+          pac solution export --name "${SOLUTION_NAME}" --outputfile "exported/${SOLUTION_NAME}.zip" --packageType Unmanaged
+          ls -la exported
+        shell: bash
+
+      # Unpack the exported solution into source folder
+      - name: Unpack solution into repo
+        run: |
+          mkdir -p ${SRC_SOLUTIONS_DIR}/${SOLUTION_NAME}
+          pac solution unpack --zipfile "exported/${SOLUTION_NAME}.zip" --folder "${SRC_SOLUTIONS_DIR}/${SOLUTION_NAME}" --packagetype Both --overwrite
+          echo "Unpack complete"
+          ls -la ${SRC_SOLUTIONS_DIR}/${SOLUTION_NAME}
+        shell: bash
+
+      # Download and unpack canvas apps (if CANVAS_APP_IDS provided)
+      - name: Download & unpack Canvas apps
+        if: env.CANVAS_APP_IDS != ''
+        run: |
+          mkdir -p ${SRC_CANVAS_DIR}
+          IFS=',' read -ra apps <<< "$CANVAS_APP_IDS"
+          for app in "${apps[@]}"; do
+            app_trimmed=$(echo $app | xargs)
+            echo "Downloading canvas app ${app_trimmed}"
+            mkdir -p "${SRC_CANVAS_DIR}/${app_trimmed}"
+            pac canvas download --app-id "${app_trimmed}" --output "${SRC_CANVAS_DIR}/${app_trimmed}/${app_trimmed}.msapp"
+            # Unpack source (requires pac canvas unpack availability in your pac version)
+            pac canvas unpack --input "${SRC_CANVAS_DIR}/${app_trimmed}/${app_trimmed}.msapp" --output "${SRC_CANVAS_DIR}/${app_trimmed}/source"
+          done
+        shell: bash
+
+      # Export configuration/reference data (requires schema file if used)
+      - name: Export configuration data (Configuration Migration)
+        run: |
+          mkdir -p ${DATA_DIR}
+          # Example: requires you have pre-created a schema file in the repo (data/schema.xml)
+          if [ -f "data/schema.xml" ]; then
+            echo "Exporting configuration data using data/schema.xml..."
+            pac data export --schema "data/schema.xml" --output "${DATA_DIR}/${SOLUTION_NAME}-configdata.zip"
+            ls -la ${DATA_DIR}
+          else
+            echo "No schema.xml detected in data/ — skipping pac data export. If you want data export, add a schema file at data/schema.xml and re-run."
+          fi
+        shell: bash
+
+      # Stage exported files, create a branch or use existing
+      - name: Create or switch to export branch
+        run: |
+          git fetch origin ${EXPORT_BRANCH} || true
+          if git show-ref --verify --quiet refs/heads/${EXPORT_BRANCH}; then
+            git checkout ${EXPORT_BRANCH}
+            git pull origin ${EXPORT_BRANCH}
+          else
+            git checkout -b ${EXPORT_BRANCH}
+          fi
+
+      - name: Add exported artifacts and commit
+        run: |
+          git add ${SRC_SOLUTIONS_DIR} ${SRC_CANVAS_DIR} ${DATA_DIR} exported || true
+          git status --porcelain
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "Automated export: ${SOLUTION_NAME} - $(date -u +"%Y-%m-%dT%H:%M:%SZ")" || true
+            git push origin ${EXPORT_BRANCH}
+          else
+            echo "No changes to commit."
+          fi
+        shell: bash
+
+      - name: Upload export artifacts as build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: powerplatform-export
+          path: |
+            exported/
+            ${SRC_SOLUTIONS_DIR}/${SOLUTION_NAME}
+            ${SRC_CANVAS_DIR}
+            ${DATA_DIR}

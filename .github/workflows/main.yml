@@ -39,7 +39,7 @@ jobs:
             --clientSecret "${{ secrets.PP_CLIENT_SECRET }}" \
             --tenant "${{ secrets.PP_TENANT_ID }}"
           echo "Listing all solutions in the environment:"
-          pac solution list --publisher
+          pac solution list
 
       - name: Clone Solution Source (unpack)
         run: |

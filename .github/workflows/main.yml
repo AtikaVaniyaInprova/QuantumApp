@@ -36,7 +36,7 @@ jobs:
       - name: Verify available solutions
         run: |
           echo "Listing available solutions in the environment..."
-          pac solution list --publisher
+          pac solution list 
 
      - name: Export solution ZIP from Dataverse
         run: |

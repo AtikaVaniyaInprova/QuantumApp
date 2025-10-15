@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install Power Platform CLI
+      - name: Install Power Platform CLI (PAC)
         run: npm install -g pac-cli
 
       - name: Authenticate with Power Platform (Service Principal)
@@ -35,36 +35,50 @@ jobs:
 
       - name: Verify available solutions
         run: |
-          echo "Listing available solutions in the environment..."
-          pac solution list 
+          echo "🔍 Listing available solutions in the environment..."
+          pac solution list  || echo "⚠️ Could not list solutions — check authentication."
 
-       - name: Export solution ZIP from Dataverse
+      - name: Export solution ZIP from Dataverse
         run: |
-          echo "Preparing export directory..."
+          echo "📦 Preparing export directory..."
           mkdir -p "${{ github.workspace }}/exports"
-      
-          echo "Exporting solution ${{ github.event.inputs.solutionName }}..."
+
+          echo "🚀 Exporting solution '${{ github.event.inputs.solutionName }}'..."
           pac solution export \
             --name "${{ github.event.inputs.solutionName }}" \
             --path "${{ github.workspace }}/exports" \
             --managed false \
-            --overwrite true
-      
-          echo "Export complete. Files in exports folder:"
-          ls -R "${{ github.workspace }}/exports" || echo "❌ No exported files found!"
+            --overwrite true || echo "⚠️ PAC export command returned an error."
 
+          echo "📂 Checking exported files..."
+          if [ -d "${{ github.workspace }}/exports" ]; then
+            ls -R "${{ github.workspace }}/exports"
+          else
+            echo "❌ Export directory not found. The export likely failed."
+            exit 1
+          fi
+
+          ZIP_FILE="${{ github.workspace }}/exports/${{ github.event.inputs.solutionName }}.zip"
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "❌ Export failed — no ZIP file found for '${{ github.event.inputs.solutionName }}'."
+            echo "Please verify the solution unique name and app permissions."
+            exit 1
+          else
+            echo "✅ Export successful: $ZIP_FILE"
+          fi
 
       - name: Unpack solution into source folder
         run: |
-          echo "Unpacking solution..."
+          echo "🗂️ Unpacking solution..."
           mkdir -p "${{ github.workspace }}/unpacked-solution"
           pac solution unpack \
             --zipFile "${{ github.workspace }}/exports/${{ github.event.inputs.solutionName }}.zip" \
             --folder "${{ github.workspace }}/unpacked-solution" \
             --allowDelete true \
             --processCanvasApps
-          echo "Unpack complete. Folder contents:"
-          ls -R "${{ github.workspace }}/unpacked-solution"
+
+          echo "📁 Unpack complete. Folder contents:"
+          ls -R "${{ github.workspace }}/unpacked-solution" || echo "⚠️ Nothing unpacked."
 
       - name: Commit and Push Unpacked Solution
         run: |
@@ -79,6 +93,6 @@ jobs:
             git push origin "$BRANCH_NAME"
             echo "✅ Backup complete and pushed to branch: $BRANCH_NAME"
           else
-            echo "❌ ERROR: unpacked-solution folder is missing or empty."
+            echo "❌ ERROR: 'unpacked-solution' folder is missing or empty."
             exit 1
           fi

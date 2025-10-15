@@ -2,6 +2,15 @@ name: Backup Model-Driven App Solution
 
 on:
   workflow_dispatch:
+    inputs:
+      environmentUrl:
+        description: 'Power Platform environment URL'
+        required: true
+        default: 'https://inprovagroupdev.crm4.dynamics.com/main.aspx'
+      solutionName:
+        description: 'Unique name of the solution to back up'
+        required: true
+        default: 'TestExport'
 
 jobs:
   backup:
@@ -11,39 +20,52 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Node.js for PAC CLI
+      - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
-      - name: Install Power Platform CLI (PAC CLI)
-        run: npm install -g pac-cli
+      - name: Install Power Platform CLI
+        run: |
+          npm install -g pac-cli
+          pac --version
 
-      - name: Authenticate with Power Platform (Service Principal)
+      - name: Authenticate with Power Platform
         run: |
           pac auth create \
             --name backupProfile \
-            --url ${{ secrets.SOURCE_ENVIRONMENT_URL }} \
-            --applicationId ${{ secrets.PP_CLIENT_ID }} \
-            --clientSecret ${{ secrets.PP_CLIENT_SECRET }} \
-            --tenant ${{ secrets.PP_TENANT_ID }}
+            --url "${{ github.event.inputs.environmentUrl }}" \
+            --applicationId "${{ secrets.PP_CLIENT_ID }}" \
+            --clientSecret "${{ secrets.PP_CLIENT_SECRET }}" \
+            --tenant "${{ secrets.PP_TENANT_ID }}"
+          echo "Listing all solutions in the environment:"
+          pac solution list --publisher
 
       - name: Clone Solution Source (unpack)
         run: |
+          echo "Attempting to clone solution: ${{ github.event.inputs.solutionName }}"
           pac solution clone \
-            --name "${{ secrets.SOLUTION_NAME }}" \
+            --name "${{ github.event.inputs.solutionName }}" \
             --path "./unpacked-solution"
-          echo "Listing folder contents:"
-          ls -la ./unpacked-solution || echo "Folder does not exist"
+          echo "Listing folder contents after clone:"
+          ls -la ./unpacked-solution || echo "Folder does not exist. Check solution name and permissions."
 
-      - name: Commit and Push Unpacked Solution
+      - name: Commit and Push to Backup Branch
         run: |
           if [ -d "./unpacked-solution" ] && [ "$(ls -A ./unpacked-solution)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            # Create a backup branch with date
+            BACKUP_BRANCH="backup-$(date +%Y-%m-%d-%H%M%S)"
+            git checkout -b $BACKUP_BRANCH
+
             git add unpacked-solution
-            git diff-index --quiet HEAD || git commit -m "Backup of ${{ secrets.SOLUTION_NAME }}"
-            git push
+            git commit -m "Backup of ${{ github.event.inputs.solutionName }} on $(date +%Y-%m-%d %H:%M:%S)"
+
+            # Push to the new branch using PAT token
+            git push https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }} HEAD:$BACKUP_BRANCH
+            echo "Backup pushed to branch $BACKUP_BRANCH"
           else
             echo "Folder 'unpacked-solution' does not exist or is empty. Skipping commit."
           fi

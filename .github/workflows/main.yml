@@ -6,11 +6,11 @@ on:
       environmentUrl:
         description: 'Power Platform environment URL'
         required: true
-        default: 'https://inprovagroupdev.crm4.dynamics.com'
+        default: 'https://yourorg.crm.dynamics.com'
       solutionName:
         description: 'Unique name of the solution to back up'
         required: true
-        default: 'TestExport'
+        default: 'my_solution'
 
 jobs:
   backup:
@@ -50,14 +50,22 @@ jobs:
           echo "Listing folder contents after clone:"
           ls -la ./unpacked-solution || echo "Folder does not exist. Check solution name and permissions."
 
-      - name: Commit and Push Unpacked Solution
+      - name: Commit and Push to Backup Branch
         run: |
           if [ -d "./unpacked-solution" ] && [ "$(ls -A ./unpacked-solution)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            # Create a timestamped backup branch
+            BACKUP_BRANCH="backup-$(date +%Y-%m-%d-%H%M%S)"
+            git checkout -b $BACKUP_BRANCH
+
             git add unpacked-solution
-            git diff-index --quiet HEAD || git commit -m "Backup of ${{ github.event.inputs.solutionName }}"
-            git push
+            git commit -m "Backup of ${{ github.event.inputs.solutionName }} on $(date +%Y-%m-%d %H:%M:%S)"
+
+            # Push to the new branch using PAT
+            git push https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }} HEAD:$BACKUP_BRANCH
+            echo "Backup successfully pushed to branch $BACKUP_BRANCH"
           else
             echo "Folder 'unpacked-solution' does not exist or is empty. Skipping commit."
           fi

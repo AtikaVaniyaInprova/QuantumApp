@@ -24,10 +24,10 @@ jobs:
         run: |
           pac auth create \
             --name backupProfile \
-            --url ${{ secrets.PP_ENVIRONMENT_URL }} \
-            --applicationId ${{ secrets.AZURE_CLIENT_ID }} \
-            --clientSecret ${{ secrets.AZURE_CLIENT_SECRET }} \
-            --tenant ${{ secrets.AZURE_TENANT_ID }}
+            --url ${{ secrets.SOURCE_ENVIRONMENT_URL }} \
+            --applicationId ${{ secrets.PP_CLIENT_ID }} \
+            --clientSecret ${{ secrets.PP_CLIENT_SECRET }} \
+            --tenant ${{ secrets.PP_TENANT_ID }}
 
       - name: Clone Solution Source (unpack)
         run: |

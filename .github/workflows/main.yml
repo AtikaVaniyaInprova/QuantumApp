@@ -44,7 +44,7 @@ jobs:
       - name: Clone Solution Source (unpack)
         run: |
           echo "Attempting to clone solution: ${{ github.event.inputs.solutionName }}"
-          pac solution clone \
+          pac solution export \
             --name "${{ github.event.inputs.solutionName }}" \
             --path "./unpacked-solution"
           echo "Listing folder contents after clone:"

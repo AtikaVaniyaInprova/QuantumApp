@@ -38,16 +38,21 @@ jobs:
           echo "Listing available solutions in the environment..."
           pac solution list --publisher
 
-      - name: Export solution ZIP from Dataverse
+     - name: Export solution ZIP from Dataverse
         run: |
+          echo "Preparing export directory..."
+          mkdir -p "${{ github.workspace }}/exports"
+      
           echo "Exporting solution ${{ github.event.inputs.solutionName }}..."
           pac solution export \
             --name "${{ github.event.inputs.solutionName }}" \
             --path "${{ github.workspace }}/exports" \
             --managed false \
             --overwrite true
+      
           echo "Export complete. Files in exports folder:"
-          ls -R "${{ github.workspace }}/exports"
+          ls -R "${{ github.workspace }}/exports" || echo "❌ No exported files found!"
+
 
       - name: Unpack solution into source folder
         run: |

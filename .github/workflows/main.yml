@@ -1,8 +1,7 @@
 name: Backup Model-Driven App Solution
 
 on:
-  schedule:
-    - cron: '0 2 * * *'     # Every day at 2 AM UTC (adjust as needed)
+ workflow_dispatch:
 
 jobs:
   backup:

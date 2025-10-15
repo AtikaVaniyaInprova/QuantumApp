@@ -1,0 +1,49 @@
+name: Backup Model-Driven App Solution
+
+on:
+  schedule:
+    - cron: '0 2 * * *'     # Every day at 2 AM UTC (adjust as needed)
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js for PAC CLI
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Power Platform CLI (PAC CLI)
+        run: npm install -g pac-cli
+
+      - name: Authenticate with Power Platform (Service Principal)
+        run: |
+          pac auth create \
+            --name backupProfile \
+            --url ${{ secrets.PP_ENVIRONMENT_URL }} \
+            --applicationId ${{ secrets.AZURE_CLIENT_ID }} \
+            --clientSecret ${{ secrets.AZURE_CLIENT_SECRET }} \
+            --tenant ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Clone Solution Source (unpack)
+        run: |
+          pac solution clone \
+            --name "${{ secrets.SOLUTION_NAME }}" \
+            --path "./unpacked-solution"
+      
+      - name: Commit and Push Unpacked Solution
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add unpacked-solution
+          git commit -m "Scheduled backup of ${{ secrets.SOLUTION_NAME }}"
+          git push
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com

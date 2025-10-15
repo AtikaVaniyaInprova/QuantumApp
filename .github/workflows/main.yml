@@ -46,10 +46,10 @@ jobs:
           echo "Attempting to clone solution: ${{ github.event.inputs.solutionName }}"
           pac solution clone \
             --name "${{ github.event.inputs.solutionName }}" \
-            --outputDirectory "./unpacked-solution"
+            --outputDirectory "${{ github.workspace }}/unpacked-solution"
 
           echo "Listing folder contents after clone:"
-          ls -R ./unpacked-solution || echo "Folder does not exist. Check solution name and permissions."
+          ls -R "${{ github.workspace }}/unpacked-solution" || echo "Folder does not exist. Check solution name and permissions."
 
       - name: Commit and Push to Backup Branch
         run: |

@@ -38,7 +38,7 @@ jobs:
           echo "Listing available solutions in the environment..."
           pac solution list 
 
-     - name: Export solution ZIP from Dataverse
+       - name: Export solution ZIP from Dataverse
         run: |
           echo "Preparing export directory..."
           mkdir -p "${{ github.workspace }}/exports"
